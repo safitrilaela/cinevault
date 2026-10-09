@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0b0b10">
+  <title>CINEVAULT - Streaming Review Movie</title>
+
+  <!-- Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Outfit', 'sans-serif'] },
+          colors: {
+            night: '#0b0b10',
+            panel: '#14141b',
+            line: '#25252f',
+            accent: '#ffc400'
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Logika aplikasi (file terpisah) - harus dimuat sebelum Alpine -->
+  <script src="js/apps.js"></script>
+  <!-- Alpine.js (CDN) -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <style>
+    [x-cloak] { display: none !important; }
+    html { scroll-behavior: smooth; }
+    body {
+      background:
+        radial-gradient(circle at top, rgba(255,196,0,.12), transparent 18%),
+        radial-gradient(circle at 80% 10%, rgba(59,130,246,.14), transparent 16%),
+        linear-gradient(180deg, #09090d 0%, #0b0b10 100%);
+    }
+
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { scrollbar-width: none; }
+
+    .line-clamp-1 { display: -webkit-box; --webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+    .line-clamp-2 { display: -webkit-box; --webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .line-clamp-3 { display: -webkit-box; --moz-animation: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+    /* Tombol kuning */
+    .btn-accent {
+      background: linear-gradient(135deg, #ffd54a 0%, #ffc400 40%, #ffb703 100%);
+      color: #17130a; font-weight: 700;
+      box-shadow: 0 10px 20px -12px rgba(255,196,0,.9);
+      transition: transform .2s, box-shadow .2s, filter .2s;
+    }
+    .btn-accent:hover {
+      background: linear-gradient(135deg, #ffe27a 0%, #ffd54a 40%, #ffc400 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 18px 30px -16px rgba(255,196,0,.75);
+      filter: brightness(1.02);
+    }
+
+    /* Kartu poster */
+    .poster {
+      transition: transform .3s cubic-bezier(.2,.8,.2,1), box-shadow .3s, border-color .3s;
+      border: 1px solid rgba(255,255,255,.04);
+    }
+    .poster:hover {
+      transform: translateY(-6px) scale(1.03);
+      box-shadow: 0 24px 50px -18px rgba(255,196,0,.45), 0 0 0 1px rgba(255,196,0,.8);
+    }
+    .poster .play { opacity: 0; transition: opacity .25s; }
+    .poster:hover .play { opacity: 1; }
+
+    /* Angka besar Top 10 */
+    .rank {
+      font-size: 7.5rem; line-height: 1; font-weight: 800; letter-spacing: -.06em;
+      color: transparent; -webkit-text-stroke: 2px rgba(255,255,255,.22);
+      text-shadow: 0 0 20px rgba(255,196,0,.12);
+    }
+
+    /* Animasi */
+    @keyframes rise { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+    .rise { animation: rise .6s cubic-bezier(.2,.8,.2,1) both; }
+    @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+    .fade { animation: fade .8s ease both; }
+    @keyframes sheet { from { transform: translateY(100%); } to { transform: none; } }
+    @media (max-width: 639px) { .sheet { animation: sheet .35s cubic-bezier(.2,.8,.2,1); } }
+    @keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+    .skeleton { background: linear-gradient(90deg, #14141b 25%, #20202b 50%, #14141b 75%); background-size: 800px 100%; animation: shimmer 1.4s infinite linear; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .ring { border: 3px solid rgba(255,196,0,.2); border-top-color: #ffc400; animation: spin .8s linear infinite; }
+
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #0b0b10; }
+    ::-webkit-scrollbar-thumb { background: #2c2c38; border-radius: 8px; }
+    ::-webkit-scrollbar-thumb:hover { background: #ffc400; }
+
+    select.year-select {
+      appearance: none; -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ffc400' stroke-width='3'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right .9rem center;
+    }
+  </style>
+</head>
+
+<body class="font-sans text-zinc-200 min-h-screen antialiased pb-20 sm:pb-0"
+      x-data="movieApp()" x-init="init()"
+      @scroll.window="scrolled = window.scrollY > 30">
+
+  <!-- ================= NAVBAR ================= -->
+  <header class="fixed top-0 inset-x-0 z-40 transition-all duration-300"
+          :class="scrolled ? 'bg-night/90 backdrop-blur-xl border-b border-line' : 'bg-gradient-to-b from-black/80 to-transparent'">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center gap-4">
+      <a href="#" @click.prevent="resetSearch()" class="flex items-center gap-2.5 shrink-0 group">
+        <span class="h-9 w-9 rounded-xl bg-gradient-to-br from-accent to-yellow-300 text-night flex items-center justify-center font-extrabold text-lg shadow-lg shadow-yellow-400/20 ring-2 ring-white/10 group-hover:scale-105 transition">C</span>
+        <span class="text-xl font-extrabold tracking-tight text-white hidden xs:inline sm:inline">CINE<span class="text-accent">VAULT</span></span>
+      </a>
+
+      <nav class="hidden md:flex items-center gap-6 text-sm font-medium ml-4">
+        <a href="#" @click.prevent="resetSearch()" class="text-white hover:text-accent transition">Beranda</a>
+        <a href="#filter-tahun" class="text-zinc-400 hover:text-accent transition">Tahun Rilis</a>
+        <a href="#daftar-film" class="text-zinc-400 hover:text-accent transition">Jelajahi</a>
+      </nav>
+
+      <form class="flex-1 flex justify-end gap-2" @submit.prevent="searchMovies()">
+        <div class="relative w-full max-w-md rounded-full bg-white/5 border border-white/10 shadow-inner shadow-black/20 backdrop-blur-md">
+          <svg class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="text" x-model="query" x-ref="searchInput" placeholder="Cari film..."
+            class="w-full rounded-full bg-transparent border border-transparent pl-11 pr-4 py-2.5 text-sm text-white
+                   placeholder-zinc-500 focus:outline-none focus:border-accent focus:bg-white/5 transition">
+        </div>
+        <button type="submit" class="btn-accent rounded-full px-5 text-sm hidden sm:block">Cari</button>
+        <button type="button" x-show="isSearching" x-cloak @click="resetSearch()"
+          class="rounded-full border border-line hover:border-accent hover:text-accent px-4 text-sm transition hidden sm:block">Reset</button>
+      </form>
+    </div>
+  </header>
+
+  <!-- ================= HERO BANNER ================= -->
+  <section x-show="isDefault && hero" x-cloak class="relative h-[72vh] sm:h-[82vh] min-h-[460px] overflow-hidden">
+    <template x-for="(h, i) in heroes" :key="h.id">
+      <img x-show="heroIndex === i"
+           x-transition:enter="transition-opacity duration-1000" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+           x-transition:leave="transition-opacity duration-700" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+           :src="backdropUrl(h.backdrop_path)" :alt="h.title"
+           class="absolute inset-0 w-full h-full object-cover">
+    </template>
+    <div class="absolute inset-0 bg-gradient-to-t from-night via-night/50 to-black/20"></div>
+    <div class="absolute inset-0 bg-gradient-to-r from-night/90 via-night/30 to-transparent"></div>
+
+    <div class="relative h-full max-w-7xl mx-auto px-4 sm:px-6 flex items-end pb-16 sm:pb-24">
+      <div class="max-w-xl" :key="hero?.id">
+        <span class="inline-flex items-center gap-1.5 bg-accent text-night text-[11px] font-extrabold tracking-wider uppercase rounded px-2.5 py-1 fade">
+          ★ Eksklusif
+        </span>
+        <h1 class="mt-4 text-4xl sm:text-6xl font-extrabold leading-[1.05] text-white drop-shadow-xl fade" x-text="hero?.title"></h1>
+        <div class="flex items-center gap-3 mt-4 text-sm font-medium fade">
+          <span class="text-accent font-bold">★ <span x-text="formatRating(hero?.vote_average)"></span></span>
+          <span class="text-zinc-500">•</span>
+          <span x-text="getYear(hero?.release_date)"></span>
+          <span class="border border-zinc-500 text-zinc-300 text-[10px] rounded px-1.5 py-0.5">HD</span>
+        </div>
+        <p class="mt-4 text-zinc-300 leading-relaxed line-clamp-3 text-sm sm:text-base fade" x-text="hero?.overview || 'Sinopsis belum tersedia.'"></p>
+        <div class="flex items-center gap-3 mt-7 fade">
+          <button @click="openDetail(hero.id)" class="btn-accent rounded-full px-7 py-3 text-sm inline-flex items-center gap-2">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg> Lihat Detail
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Indikator hero -->
+    <div class="absolute bottom-6 sm:bottom-10 right-4 sm:right-8 flex gap-2" x-show="heroes.length > 1">
+      <template x-for="(h, i) in heroes" :key="'dot' + h.id">
+        <button @click="heroIndex = i" aria-label="Slide"
+                class="h-1.5 rounded-full transition-all duration-300"
+                :class="heroIndex === i ? 'w-8 bg-accent' : 'w-3 bg-white/30 hover:bg-white/60'"></button>
+      </template>
+    </div>
+  </section>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6" :class="isDefault ? 'pt-8' : 'pt-24'">
+
+    <!-- ================= TOP 10 ================= -->
+    <section x-show="isDefault && top10.length" x-cloak class="mb-12">
+      <h2 class="text-xl sm:text-2xl font-extrabold text-white mb-4 flex items-center gap-2">
+        <span class="w-1 h-6 bg-accent rounded"></span> Top 10 Minggu Ini
+      </h2>
+      <div class="flex gap-2 sm:gap-4 overflow-x-auto no-scrollbar pb-3 -mx-4 px-4 sm:mx-0 sm:px-0">
+        <template x-for="(m, i) in top10" :key="'top' + m.id">
+          <div @click="openDetail(m.id)" class="relative shrink-0 flex items-end cursor-pointer group rise" :style="'animation-delay:' + (i * 60) + 'ms'">
+            <span class="rank -mr-5 sm:-mr-6 z-0 transition group-hover:[-webkit-text-stroke:2px_#ffc400]" x-text="i + 1"></span>
+            <div class="poster relative z-10 w-28 sm:w-36 aspect-[2/3] rounded-lg overflow-hidden bg-panel">
+              <img :src="posterUrl(m.poster_path, 'w342')" :alt="m.title" loading="lazy" class="w-full h-full object-cover">
+            </div>
+          </div>
+        </template>
+      </div>
+    </section>
+
+    <!-- ================= FILTER TAHUN RILIS ================= -->
+    <section id="filter-tahun" class="mb-6 scroll-mt-20">
+      <div class="flex items-center justify-between gap-3 mb-3">
+        <h2 class="text-sm font-semibold text-zinc-400 uppercase tracking-widest">Tahun Rilis</h2>
+        <div class="relative">
+          <select class="year-select bg-panel border border-line text-sm text-white rounded-full pl-4 pr-9 py-2 focus:outline-none focus:border-accent cursor-pointer"
+                  :value="year" @change="setYear($event.target.value)" aria-label="Pilih tahun rilis">
+            <option value="">Semua tahun</option>
+            <template x-for="y in allYears" :key="'opt' + y">
+              <option :value="y" x-text="y" :selected="String(y) === year"></option>
+            </template>
+          </select>
+        </div>
+      </div>
+
+      <div class="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0 pb-1">
+        <button @click="setYear('')"
+                class="shrink-0 rounded-full px-5 py-2 text-sm font-semibold border transition"
+                :class="year === '' ? 'bg-accent text-night border-accent' : 'bg-panel text-zinc-300 border-line hover:border-accent hover:text-accent'">
+          Semua
+        </button>
+        <template x-for="y in recentYears" :key="'chip' + y">
+          <button @click="setYear(y)"
+                  class="shrink-0 rounded-full px-5 py-2 text-sm font-semibold border transition"
+                  :class="year === String(y) ? 'bg-accent text-night border-accent' : 'bg-panel text-zinc-300 border-line hover:border-accent hover:text-accent'"
+                  x-text="y"></button>
+        </template>
+      </div>
+    </section>
+
+    <!-- ================= DAFTAR FILM ================= -->
+    <section id="daftar-film" class="scroll-mt-20">
+      <div class="flex items-center gap-3 mb-6">
+        <span class="w-1 h-6 bg-accent rounded"></span>
+        <h2 class="text-xl sm:text-2xl font-extrabold text-white" x-text="sectionTitle"></h2>
+        <span x-show="!loading && movies.length" class="text-xs text-zinc-500" x-text="movies.length + ' film'"></span>
+      </div>
+
+      <!-- Error -->
+      <div x-show="error" x-cloak class="mb-6 rounded-xl bg-red-500/10 border border-red-500/40 text-red-300 px-4 py-3 text-sm" x-text="error"></div>
+
+      <!-- Loading indicator (skeleton) -->
+      <div x-show="loading" x-cloak>
+        <div class="flex items-center justify-center gap-3 mb-6 text-sm text-accent">
+          <div class="ring h-6 w-6 rounded-full"></div> Memuat film...
+        </div>
+        <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 sm:gap-5">
+          <template x-for="i in 12" :key="'sk' + i">
+            <div>
+              <div class="skeleton aspect-[2/3] rounded-lg"></div>
+              <div class="skeleton h-3 w-3/4 rounded mt-3"></div>
+              <div class="skeleton h-3 w-1/3 rounded mt-2"></div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Tampilan kosong -->
+      <div x-show="!loading && !error && movies.length === 0" x-cloak class="text-center py-20 rise">
+        <div class="text-7xl mb-4">🎬</div>
+        <p class="text-2xl font-bold text-white">Film tidak ditemukan</p>
+        <p class="text-sm text-zinc-400 mt-2">
+          Tidak ada hasil<span x-show="lastQuery"> untuk "<span class="text-accent" x-text="lastQuery"></span>"</span><span x-show="year"> di tahun <span class="text-accent" x-text="year"></span></span>.
+          Coba kata kunci atau tahun lain.
+        </p>
+        <button @click="resetSearch()" class="btn-accent mt-6 rounded-full px-7 py-3 text-sm">Kembali ke Film Populer</button>
+      </div>
+
+      <!-- Grid kartu film -->
+      <div x-show="!loading && movies.length > 0" x-cloak
+           class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 sm:gap-5">
+        <template x-for="(movie, i) in movies" :key="movie.id">
+          <article @click="openDetail(movie.id)" class="cursor-pointer rise" :style="'animation-delay:' + ((i % 12) * 40) + 'ms'">
+            <div class="poster relative aspect-[2/3] rounded-lg overflow-hidden bg-panel">
+              <img :src="posterUrl(movie.poster_path, 'w342')" :alt="movie.title" loading="lazy" class="w-full h-full object-cover">
+              <span class="absolute top-1.5 left-1.5 bg-black/75 backdrop-blur text-accent text-[11px] font-bold px-2 py-0.5 rounded">
+                ★ <span x-text="formatRating(movie.vote_average)"></span>
+              </span>
+              <div class="play absolute inset-0 bg-black/50 flex items-center justify-center">
+                <span class="h-12 w-12 rounded-full bg-accent text-night flex items-center justify-center shadow-xl">
+                  <svg class="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                </span>
+              </div>
+            </div>
+            <h3 class="mt-2.5 font-semibold text-[13px] sm:text-sm line-clamp-1 text-white" x-text="movie.title"></h3>
+            <p class="text-xs text-zinc-500 mt-0.5" x-text="getYear(movie.release_date)"></p>
+          </article>
+        </template>
+      </div>
+
+      <!-- Muat lebih banyak -->
+      <div x-show="!loading && movies.length > 0 && hasMore" x-cloak class="text-center mt-10">
+        <button @click="loadMore()" :disabled="loadingMore"
+                class="rounded-full border border-line hover:border-accent hover:text-accent px-8 py-3 text-sm font-semibold transition inline-flex items-center gap-3 disabled:opacity-60">
+          <span x-show="loadingMore" class="ring h-4 w-4 rounded-full"></span>
+          <span x-text="loadingMore ? 'Memuat...' : 'Muat Lebih Banyak'"></span>
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="border-t border-line mt-16 text-center text-xs text-zinc-500 py-10">
+    <p class="text-lg font-extrabold text-white tracking-tight">CINE<span class="text-accent">VAULT</span></p>
+    <p class="mt-2">Data film dari <a href="https://www.themoviedb.org" target="_blank" rel="noopener" class="text-accent hover:underline">TMDB</a></p>
+  </footer>
+
+  <!-- ================= BOTTOM NAV (MOBILE) ================= -->
+  <nav class="sm:hidden fixed bottom-0 inset-x-0 z-40 bg-night/95 backdrop-blur-xl border-t border-line">
+    <div class="grid grid-cols-3 text-[11px] font-medium">
+      <button @click="resetSearch()" class="flex flex-col items-center gap-1 py-2.5 hover:text-accent"
+              :class="isDefault ? 'text-accent' : 'text-zinc-400'">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg>
+        Beranda
+      </button>
+      <button @click="focusSearch()" class="flex flex-col items-center gap-1 py-2.5 text-zinc-400 hover:text-accent">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        Cari
+      </button>
+      <a href="#filter-tahun" class="flex flex-col items-center gap-1 py-2.5 hover:text-accent"
+         :class="year ? 'text-accent' : 'text-zinc-400'">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        Tahun
+      </a>
+    </div>
+  </nav>
+
+  <!-- ================= MODAL DETAIL ================= -->
+  <div x-show="modalOpen" x-cloak
+       x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+       x-transition:leave="transition ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+       @keydown.escape.window="closeModal()"
+       class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-6 bg-black/80 backdrop-blur-sm"
+       @click.self="closeModal()">
+
+    <div class="sheet relative w-full sm:max-w-4xl max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-panel border border-line shadow-2xl"
+         role="dialog" aria-modal="true">
+
+      <button @click="closeModal()" aria-label="Tutup"
+        class="absolute top-4 right-4 z-20 h-10 w-10 rounded-full bg-black/60 backdrop-blur border border-white/15 hover:bg-accent hover:text-night hover:border-accent transition">
+        ✕
+      </button>
+
+      <!-- Loading detail -->
+      <div x-show="detailLoading" class="flex flex-col items-center justify-center py-28 gap-4">
+        <div class="ring h-12 w-12 rounded-full"></div>
+        <p class="text-sm text-zinc-400">Memuat detail film...</p>
+      </div>
+
+      <div x-show="!detailLoading && selected">
+        <!-- Backdrop -->
+        <div class="relative h-44 sm:h-64 overflow-hidden">
+          <img :src="backdropUrl(selected?.backdrop_path)" alt="" class="w-full h-full object-cover">
+          <div class="absolute inset-0 bg-gradient-to-t from-panel via-panel/40 to-transparent"></div>
+        </div>
+
+        <div class="relative flex flex-col md:flex-row gap-6 sm:gap-8 px-5 sm:px-8 pb-8 -mt-24 sm:-mt-36">
+          <!-- Poster -->
+          <div class="w-36 sm:w-56 md:w-60 shrink-0 mx-auto md:mx-0">
+            <img :src="posterUrl(selected?.poster_path, 'w500')" :alt="selected?.title"
+                 class="w-full rounded-xl shadow-2xl ring-2 ring-accent/60">
+          </div>
+
+          <!-- Info -->
+          <div class="flex-1 min-w-0 md:pt-32 sm:md:pt-40 text-center md:text-left">
+            <h2 class="text-3xl sm:text-4xl font-extrabold text-white leading-tight" x-text="selected?.title"></h2>
+            <p x-show="selected?.tagline" class="italic text-accent/80 mt-1 text-sm" x-text="selected?.tagline"></p>
+
+            <div class="flex flex-wrap justify-center md:justify-start items-center gap-2 mt-4 text-sm">
+              <span class="bg-accent text-night font-extrabold px-3.5 py-1.5 rounded-full">★ <span x-text="formatRating(selected?.vote_average)"></span> / 10</span>
+              <span class="border border-line bg-night/50 px-3.5 py-1.5 rounded-full" x-text="'Rilis ' + getYear(selected?.release_date)"></span>
+              <span x-show="selected?.runtime" class="border border-line bg-night/50 px-3.5 py-1.5 rounded-full" x-text="selected?.runtime + ' menit'"></span>
+            </div>
+
+            <div class="flex flex-wrap justify-center md:justify-start gap-2 mt-4" x-show="selected?.genres?.length">
+              <template x-for="g in (selected?.genres || [])" :key="g.id">
+                <span class="text-[11px] font-semibold tracking-wide text-accent bg-accent/10 px-3 py-1 rounded-full" x-text="g.name"></span>
+              </template>
+            </div>
+
+            <h3 class="font-bold text-white mt-6 mb-2 text-left">Sinopsis</h3>
+            <p class="text-sm sm:text-base leading-relaxed text-zinc-300 text-left"
+               x-text="selected?.overview || 'Sinopsis belum tersedia.'"></p>
+
+            <!-- Nonton Trailer -->
+            <div class="mt-7">
+              <a x-show="trailerUrl" :href="trailerUrl" target="_blank" rel="noopener"
+                 class="btn-accent inline-flex items-center gap-2.5 rounded-full px-7 py-3 text-sm">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg> Nonton Trailer
+              </a>
+              <p x-show="!trailerUrl" class="text-xs text-zinc-500">Trailer tidak tersedia.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
